@@ -1,0 +1,333 @@
+'use strict';
+
+const vscode = require('vscode');
+const fs = require('fs');
+const path = require('path');
+const { execFile } = require('child_process');
+
+const CONFIG_SECTION = 'claudeArchiveCloseTab';
+const CLAUDE_KEY = 'Anthropic.claude-code';
+const WATCH_DEBOUNCE_MS = 200;
+const SQLITE_BUSY_RETRIES = 3;
+const SQLITE_BUSY_BACKOFF_MS = 50;
+// Verified on this machine: /usr/bin/sqlite3 3.51. Hardcoded so a
+// Homebrew/pyenv-shimmed `sqlite3` earlier in PATH is never picked up instead.
+const SQLITE_BIN = '/usr/bin/sqlite3';
+
+let output;
+
+function log(msg) {
+  const ts = new Date().toISOString();
+  output.appendLine(`[${ts}] ${msg}`);
+}
+
+function warn(msg) {
+  const ts = new Date().toISOString();
+  if (typeof output.warn === 'function') {
+    output.warn(msg);
+  } else {
+    output.appendLine(`[${ts}] WARNING: ${msg}`);
+  }
+}
+
+function isEnabled() {
+  return vscode.workspace.getConfiguration(CONFIG_SECTION).get('enabled', true);
+}
+
+function safetyNetSeconds() {
+  return vscode.workspace.getConfiguration(CONFIG_SECTION).get('safetyNetSeconds', 60);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Reads a single key's JSON value out of a VS Code state.vscdb (ItemTable) via
+ * the sqlite3 CLI, read-only. Retries on SQLITE_BUSY.
+ * Returns the parsed JSON value, or undefined if the key/db is missing.
+ */
+async function readStateKey(dbPath, key) {
+  const sql = `select value from ItemTable where key='${key}';`;
+  let lastErr;
+  for (let attempt = 1; attempt <= SQLITE_BUSY_RETRIES; attempt++) {
+    try {
+      const raw = await new Promise((resolve, reject) => {
+        execFile(SQLITE_BIN, ['-readonly', dbPath, sql], { encoding: 'utf8' }, (err, stdout, stderr) => {
+          if (err) {
+            reject(new Error(stderr || err.message));
+            return;
+          }
+          resolve(stdout);
+        });
+      });
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        return undefined;
+      }
+      return JSON.parse(trimmed);
+    } catch (err) {
+      lastErr = err;
+      if (/SQLITE_BUSY|database is locked/i.test(err.message) && attempt < SQLITE_BUSY_RETRIES) {
+        log(`readStateKey busy on ${dbPath} (attempt ${attempt}/${SQLITE_BUSY_RETRIES}), backing off ${SQLITE_BUSY_BACKOFF_MS}ms`);
+        await sleep(SQLITE_BUSY_BACKOFF_MS);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * Tolerant title matcher: exact match first, then prefix match if the stored
+ * title was truncated with a trailing ellipsis (U+2026).
+ */
+function titlesMatch(storedTitle, tabLabel) {
+  log(`title match attempt: stored="${storedTitle}" tabLabel="${tabLabel}"`);
+  if (storedTitle === tabLabel) {
+    return true;
+  }
+  if (storedTitle.endsWith('…')) {
+    const prefix = storedTitle.slice(0, -1);
+    if (tabLabel.slice(0, prefix.length) === prefix) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isClaudeWebviewTab(tab) {
+  return (
+    tab.input instanceof vscode.TabInputWebview &&
+    typeof tab.input.viewType === 'string' &&
+    tab.input.viewType.includes('claudeVSCodePanel')
+  );
+}
+
+function allTabs() {
+  const tabs = [];
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      tabs.push(tab);
+    }
+  }
+  return tabs;
+}
+
+function activate(context) {
+  output = vscode.window.createOutputChannel('Claude Archive Close Tab', { log: true });
+  context.subscriptions.push(output);
+  log('activating');
+
+  if (!fs.existsSync(SQLITE_BIN)) {
+    warn(`sqlite3 binary not found at ${SQLITE_BIN} — Claude Archive Close Tab is disabled (no watchers/timers set up).`);
+    return;
+  }
+
+  const globalStorageDir = path.dirname(context.globalStorageUri.fsPath);
+  const globalDbPath = path.join(globalStorageDir, 'state.vscdb');
+  const workspaceDbPath = context.storageUri
+    ? path.join(path.dirname(context.storageUri.fsPath), 'state.vscdb')
+    : undefined;
+
+  log(`globalStorageDir=${globalStorageDir}`);
+  log(`globalDbPath=${globalDbPath}`);
+  log(`workspaceDbPath=${workspaceDbPath || '<none: no folder open>'}`);
+
+  const seenIds = new Set();
+  let seeded = false;
+  let checking = false;
+
+  async function seedIfNeeded() {
+    if (seeded) {
+      return;
+    }
+    try {
+      const hidden = (await readStateKey(globalDbPath, CLAUDE_KEY))?.hiddenSessionIds || [];
+      for (const id of hidden) {
+        seenIds.add(id);
+      }
+      seeded = true;
+      log(`seeded ${seenIds.size} already-archived session ids on activation`);
+    } catch (err) {
+      log(`seed failed: ${err.message}`);
+    }
+  }
+
+  async function checkForArchived() {
+    if (!isEnabled()) {
+      return;
+    }
+    if (checking) {
+      return;
+    }
+    checking = true;
+    try {
+      await seedIfNeeded();
+
+      let value;
+      try {
+        value = await readStateKey(globalDbPath, CLAUDE_KEY);
+      } catch (err) {
+        log(`failed to read globalStorage db: ${err.message}`);
+        return;
+      }
+      const hidden = value?.hiddenSessionIds || [];
+
+      const newIds = hidden.filter((id) => !seenIds.has(id));
+      if (newIds.length === 0) {
+        return;
+      }
+
+      for (const id of newIds) {
+        seenIds.add(id);
+        log(`new archived session observed: ${id}`);
+      }
+
+      if (!workspaceDbPath) {
+        log('no workspace storage db (no folder open) — cannot map session ids to tabs');
+        return;
+      }
+
+      let wsValue;
+      try {
+        wsValue = await readStateKey(workspaceDbPath, CLAUDE_KEY);
+      } catch (err) {
+        log(`failed to read workspace storage db: ${err.message}`);
+        return;
+      }
+      const panelTabSessions = wsValue?.panelTabSessions || [];
+
+      const titleById = new Map();
+      for (const entry of panelTabSessions) {
+        if (newIds.includes(entry.sessionId)) {
+          titleById.set(entry.sessionId, entry.title);
+        }
+      }
+
+      if (titleById.size === 0) {
+        log('none of the newly archived session ids have a known tab title in this workspace — nothing to close here');
+        return;
+      }
+
+      const candidateTabs = allTabs().filter(isClaudeWebviewTab);
+      log(`scanning ${candidateTabs.length} claudeVSCodePanel tab(s) against ${titleById.size} newly archived title(s)`);
+
+      for (const [sessionId, title] of titleById) {
+        const matches = candidateTabs.filter((t) => titlesMatch(title, t.label));
+        if (matches.length === 0) {
+          log(`no open tab matched archived session ${sessionId} (title="${title}")`);
+          continue;
+        }
+        if (matches.length > 1) {
+          warn(
+            `ambiguous match for archived session ${sessionId} (title="${title}") — ` +
+              `${matches.length} candidate tabs matched: ${matches.map((t) => `"${t.label}"`).join(', ')}. ` +
+              `Not closing any tab to avoid closing the wrong one.`
+          );
+          continue;
+        }
+        const tab = matches[0];
+        try {
+          await vscode.window.tabGroups.close(tab);
+          log(`closed tab for archived session ${sessionId} (title="${title}")`);
+        } catch (err) {
+          log(`failed to close tab for session ${sessionId}: ${err.message}`);
+        }
+      }
+    } finally {
+      checking = false;
+    }
+  }
+
+  // Trigger 1: fs.watch on the globalStorage directory (not the file — the
+  // file gets replaced on macOS with journal_mode=delete, which breaks a
+  // watch on the file itself).
+  let debounceTimer;
+  context.subscriptions.push({
+    dispose: () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+    },
+  });
+  const scheduleCheck = () => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+    debounceTimer = setTimeout(() => {
+      debounceTimer = undefined;
+      checkForArchived().catch((err) => log(`checkForArchived error: ${err.message}`));
+    }, WATCH_DEBOUNCE_MS);
+  };
+
+  let watcher;
+  try {
+    watcher = fs.watch(globalStorageDir, { persistent: false }, () => {
+      scheduleCheck();
+    });
+    context.subscriptions.push({
+      dispose: () => {
+        try {
+          watcher.close();
+        } catch (err) {
+          // ignore
+        }
+      },
+    });
+    log(`watching directory: ${globalStorageDir}`);
+  } catch (err) {
+    log(`failed to watch ${globalStorageDir}: ${err.message}`);
+  }
+
+  // Trigger 2: native tab change events (free).
+  context.subscriptions.push(
+    vscode.window.tabGroups.onDidChangeTabs(() => {
+      scheduleCheck();
+    })
+  );
+
+  // Trigger 3: safety-net interval, since fs.watch can drop events on macOS.
+  // Reconfigurable so changing claudeArchiveCloseTab.safetyNetSeconds does not
+  // require a window reload.
+  let intervalHandle;
+  const configureSafetyNet = () => {
+    if (intervalHandle) {
+      clearInterval(intervalHandle);
+      intervalHandle = undefined;
+    }
+    const seconds = safetyNetSeconds();
+    if (seconds > 0) {
+      intervalHandle = setInterval(() => {
+        checkForArchived().catch((err) => log(`checkForArchived error: ${err.message}`));
+      }, seconds * 1000);
+      log(`safety-net interval set to every ${seconds}s`);
+    } else {
+      log('safety-net interval disabled (safetyNetSeconds=0)');
+    }
+  };
+  configureSafetyNet();
+  context.subscriptions.push({
+    dispose: () => {
+      if (intervalHandle) {
+        clearInterval(intervalHandle);
+      }
+    },
+  });
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration(`${CONFIG_SECTION}.safetyNetSeconds`)) {
+        configureSafetyNet();
+      }
+    })
+  );
+
+  // Seed immediately on activation so the very first real check has a
+  // populated seen-set, rather than racing the first trigger.
+  seedIfNeeded().catch((err) => log(`initial seed error: ${err.message}`));
+}
+
+function deactivate() {}
+
+module.exports = { activate, deactivate };

@@ -1,0 +1,50 @@
+{
+  "name": "claude-archive-close-tab",
+  "displayName": "Claude Archive Close Tab",
+  "description": "Closes the editor tab for a Claude Code session when it is archived in the official Anthropic extension.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pocharlies/claude-archive-close-tab.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pocharlies/claude-archive-close-tab/issues"
+  },
+  "homepage": "https://github.com/pocharlies/claude-archive-close-tab",
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "tabs",
+    "archive"
+  ],
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "Claude Archive Close Tab",
+      "properties": {
+        "claudeArchiveCloseTab.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically close the editor tab for a Claude Code session when it is archived."
+        },
+        "claudeArchiveCloseTab.safetyNetSeconds": {
+          "type": "number",
+          "default": 60,
+          "description": "Interval (in seconds) for a safety-net poll of the archived session list, in case fs.watch drops an event. Set to 0 to disable the timer."
+        }
+      }
+    }
+  }
+}
