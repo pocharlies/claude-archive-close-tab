@@ -4,8 +4,7 @@
   "description": "Closes the editor tab for a Claude Code session when it is archived in the official Anthropic extension.",
   "version": "0.2.0",
   "extensionKind": [
-    "ui",
-    "workspace"
+    "ui"
   ],
   "publisher": "local",
   "license": "MIT",

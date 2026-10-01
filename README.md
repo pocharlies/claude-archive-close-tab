@@ -82,7 +82,11 @@ archive/close event are logged there.
 ## Remote SSH windows
 
 Works over Remote SSH, but only when the extension runs in the **client**
-extension host, which is what `"extensionKind": ["ui", "workspace"]` declares.
+extension host, which is what `"extensionKind": ["ui"]` declares — deliberately
+with no `"workspace"` fallback: on the server the databases it reads are empty,
+so a server-side run would activate, fail with `no such table` and log forever
+without ever closing a tab. With `ui` only, VS Code instead tells you the
+extension is missing locally and offers to install it.
 
 The reason is where the state lives, not where the session runs: for a remote
 window the `claude-code` extension writes its `globalState` into the
