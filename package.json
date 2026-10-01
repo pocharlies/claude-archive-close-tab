@@ -2,7 +2,10 @@
   "name": "claude-archive-close-tab",
   "displayName": "Claude Archive Close Tab",
   "description": "Closes the editor tab for a Claude Code session when it is archived in the official Anthropic extension.",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "extensionKind": [
+    "ui"
+  ],
   "publisher": "local",
   "license": "MIT",
   "repository": {
