@@ -79,6 +79,25 @@ Open the Output panel (`View -> Output`) and select **"Claude Archive Close
 Tab"** from the channel dropdown. Activation and every detected
 archive/close event are logged there.
 
+## Remote SSH windows
+
+Works over Remote SSH, but only when the extension runs in the **client**
+extension host, which is what `"extensionKind": ["ui", "workspace"]` declares.
+
+The reason is where the state lives, not where the session runs: for a remote
+window the `claude-code` extension writes its `globalState` into the
+**machine you connected from** — `~/Library/Application Support/Code/User/globalStorage/state.vscdb`
+on the local Mac — together with the tab map in
+`.../workspaceStorage/<hash>/state.vscdb`. The remote host's own
+`~/.vscode-server/data/User/globalStorage/state.vscdb` stays empty (no
+`ItemTable` at all), so a copy of this extension installed on the server can
+never see an archive. Closing a tab is a client-side operation anyway
+(`vscode.window.tabGroups.close`).
+
+Install it on the **client** Mac (`code --install-extension` from a local
+window, not from inside the remote one). Installing it on the server does
+nothing.
+
 ## Platform support
 
 **macOS only, currently.** The state file paths themselves
