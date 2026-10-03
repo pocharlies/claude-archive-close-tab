@@ -4,6 +4,7 @@ const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
+const { LabelHistory, pickTab } = require('./lib/matching');
 
 const CONFIG_SECTION = 'claudeArchiveCloseTab';
 const CLAUDE_KEY = 'Anthropic.claude-code';
@@ -36,6 +37,13 @@ function isEnabled() {
 
 function safetyNetSeconds() {
   return vscode.workspace.getConfiguration(CONFIG_SECTION).get('safetyNetSeconds', 60);
+}
+
+// How long a tab's previous label still counts as "this tab showed that
+// session": the archive can reach state.vscdb up to one safety-net interval
+// after the tab already swapped to another session.
+function labelMemoryMs() {
+  return Math.max(90, safetyNetSeconds() + 30) * 1000;
 }
 
 function sleep(ms) {
@@ -79,24 +87,6 @@ async function readStateKey(dbPath, key) {
   throw lastErr;
 }
 
-/**
- * Tolerant title matcher: exact match first, then prefix match if the stored
- * title was truncated with a trailing ellipsis (U+2026).
- */
-function titlesMatch(storedTitle, tabLabel) {
-  log(`title match attempt: stored="${storedTitle}" tabLabel="${tabLabel}"`);
-  if (storedTitle === tabLabel) {
-    return true;
-  }
-  if (storedTitle.endsWith('…')) {
-    const prefix = storedTitle.slice(0, -1);
-    if (tabLabel.slice(0, prefix.length) === prefix) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function isClaudeWebviewTab(tab) {
   return (
     tab.input instanceof vscode.TabInputWebview &&
@@ -136,8 +126,18 @@ function activate(context) {
   log(`workspaceDbPath=${workspaceDbPath || '<none: no folder open>'}`);
 
   const seenIds = new Set();
+  // sessionId -> tab title, accumulated from panelTabSessions on every check.
+  // When the official extension swaps a tab away from an archived session it
+  // also drops that session from panelTabSessions, so the title has to be
+  // remembered from before the archive.
+  const knownTitles = new Map();
+  const history = new LabelHistory(labelMemoryMs());
   let seeded = false;
   let checking = false;
+
+  function claudeTabs() {
+    return allTabs().filter(isClaudeWebviewTab);
+  }
 
   async function seedIfNeeded() {
     if (seeded) {
@@ -155,6 +155,24 @@ function activate(context) {
     }
   }
 
+  async function refreshKnownTitles() {
+    if (!workspaceDbPath) {
+      return;
+    }
+    let wsValue;
+    try {
+      wsValue = await readStateKey(workspaceDbPath, CLAUDE_KEY);
+    } catch (err) {
+      log(`failed to read workspace storage db: ${err.message}`);
+      return;
+    }
+    for (const entry of wsValue?.panelTabSessions || []) {
+      if (entry && entry.sessionId && entry.title) {
+        knownTitles.set(entry.sessionId, entry.title);
+      }
+    }
+  }
+
   async function checkForArchived() {
     if (!isEnabled()) {
       return;
@@ -165,6 +183,7 @@ function activate(context) {
     checking = true;
     try {
       await seedIfNeeded();
+      await refreshKnownTitles();
 
       let value;
       try {
@@ -190,19 +209,10 @@ function activate(context) {
         return;
       }
 
-      let wsValue;
-      try {
-        wsValue = await readStateKey(workspaceDbPath, CLAUDE_KEY);
-      } catch (err) {
-        log(`failed to read workspace storage db: ${err.message}`);
-        return;
-      }
-      const panelTabSessions = wsValue?.panelTabSessions || [];
-
       const titleById = new Map();
-      for (const entry of panelTabSessions) {
-        if (newIds.includes(entry.sessionId)) {
-          titleById.set(entry.sessionId, entry.title);
+      for (const id of newIds) {
+        if (knownTitles.has(id)) {
+          titleById.set(id, knownTitles.get(id));
         }
       }
 
@@ -211,27 +221,31 @@ function activate(context) {
         return;
       }
 
-      const candidateTabs = allTabs().filter(isClaudeWebviewTab);
-      log(`scanning ${candidateTabs.length} claudeVSCodePanel tab(s) against ${titleById.size} newly archived title(s)`);
+      const now = Date.now();
+      const candidateTabs = claudeTabs();
+      history.observe(candidateTabs, now);
+      log(
+        `scanning ${candidateTabs.length} claudeVSCodePanel tab(s) against ${titleById.size} newly archived title(s): ` +
+          candidateTabs.map((t) => `"${t.label}"`).join(', ')
+      );
 
       for (const [sessionId, title] of titleById) {
-        const matches = candidateTabs.filter((t) => titlesMatch(title, t.label));
-        if (matches.length === 0) {
-          log(`no open tab matched archived session ${sessionId} (title="${title}")`);
+        const { tab, reason, candidates } = pickTab(title, candidateTabs, history, now);
+        if (!tab && candidates.length === 0) {
+          log(`no open tab showed archived session ${sessionId} (title="${title}"), now or in the last ${history.memoryMs / 1000}s`);
           continue;
         }
-        if (matches.length > 1) {
+        if (!tab) {
           warn(
-            `ambiguous match for archived session ${sessionId} (title="${title}") — ` +
-              `${matches.length} candidate tabs matched: ${matches.map((t) => `"${t.label}"`).join(', ')}. ` +
+            `${reason} for archived session ${sessionId} (title="${title}") — ` +
+              `${candidates.length} candidate tabs: ${candidates.map((t) => `"${t.label}"`).join(', ')}. ` +
               `Not closing any tab to avoid closing the wrong one.`
           );
           continue;
         }
-        const tab = matches[0];
         try {
           await vscode.window.tabGroups.close(tab);
-          log(`closed tab for archived session ${sessionId} (title="${title}")`);
+          log(`closed tab for archived session ${sessionId} (title="${title}", matched by ${reason}, tab now "${tab.label}")`);
         } catch (err) {
           log(`failed to close tab for session ${sessionId}: ${err.message}`);
         }
@@ -284,6 +298,7 @@ function activate(context) {
   // Trigger 2: native tab change events (free).
   context.subscriptions.push(
     vscode.window.tabGroups.onDidChangeTabs(() => {
+      history.observe(claudeTabs(), Date.now());
       scheduleCheck();
     })
   );
@@ -319,13 +334,17 @@ function activate(context) {
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration(`${CONFIG_SECTION}.safetyNetSeconds`)) {
         configureSafetyNet();
+        history.memoryMs = labelMemoryMs();
       }
     })
   );
 
   // Seed immediately on activation so the very first real check has a
   // populated seen-set, rather than racing the first trigger.
-  seedIfNeeded().catch((err) => log(`initial seed error: ${err.message}`));
+  history.observe(claudeTabs(), Date.now());
+  seedIfNeeded()
+    .then(refreshKnownTitles)
+    .catch((err) => log(`initial seed error: ${err.message}`));
 }
 
 function deactivate() {}
