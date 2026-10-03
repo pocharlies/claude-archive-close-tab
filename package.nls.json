@@ -1,0 +1,15 @@
+{
+  "displayName": "Claude Archive Close Tab",
+  "description": "Closes the editor tab for a Claude Code session when it is archived in the official Anthropic extension.",
+  "command.openSettings": "Open Settings",
+  "command.showLog": "Show Log",
+  "config.enabled": "Close the editor tab of a Claude Code session when it is archived.",
+  "config.notifications": "Tell you when a tab is closed. Ambiguous archives (several tabs match, so none is closed) show a warning with any value other than `off`.",
+  "config.notifications.off": "Only the log (Output → Claude Archive Close Tab).",
+  "config.notifications.statusBar": "A short message in the status bar.",
+  "config.notifications.notification": "A notification in the corner.",
+  "config.skipPinnedTabs": "Keep pinned tabs open even when their session is archived.",
+  "config.recentLabelSeconds": "Archiving the session a tab shows makes Claude Code switch that tab to another session at once. For this many seconds the tab still counts as showing the archived session, so it is closed anyway. Never shorter than `#claudeArchiveCloseTab.safetyNetSeconds#` + 30. `0` turns this off and only tabs still showing the archived title are closed.",
+  "config.safetyNetSeconds": "Seconds between safety-net checks of the archived list, in case a file-change event is missed. `0` turns the timer off.",
+  "config.sqlitePath": "Absolute path of the `sqlite3` binary used to read VS Code's state databases (read-only). Reload the window after changing it."
+}

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <rect width="256" height="256" rx="56" fill="#22313F"/>
+  <!-- editor tab with its close mark -->
+  <path d="M84 40 h88 a12 12 0 0 1 12 12 v40 h-112 v-40 a12 12 0 0 1 12 -12 z" fill="#F2A65A"/>
+  <rect x="88" y="62" width="52" height="9" rx="4.5" fill="#22313F" opacity="0.55"/>
+  <path d="M157 59 l14 14 M171 59 l-14 14" stroke="#22313F" stroke-width="7" stroke-linecap="round"/>
+  <!-- into the archive -->
+  <path d="M128 104 v34 M112 124 l16 16 l16 -16" stroke="#F2A65A" stroke-width="11" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="40" y="150" width="176" height="30" rx="9" fill="#E8EDF2"/>
+  <path d="M52 180 h152 v34 a12 12 0 0 1 -12 12 h-128 a12 12 0 0 1 -12 -12 z" fill="#C3CEDA"/>
+  <rect x="104" y="193" width="48" height="11" rx="5.5" fill="#22313F"/>
+</svg>

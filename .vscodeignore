@@ -5,3 +5,4 @@ ARCHITECTURE.md
 *.vsix
 .gitignore
 scripts/**
+images/icon.svg

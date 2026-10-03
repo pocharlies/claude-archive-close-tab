@@ -88,10 +88,23 @@ the changelog** — write it for the reader of the release notes.
 
 ## Settings
 
+Open them with **Claude Archive Close Tab: Open Settings** from the Command
+Palette, or search `@ext:local.claude-archive-close-tab` in Settings. The
+descriptions are translated to Spanish when VS Code runs in Spanish.
+
 | Setting | Type | Default | Description |
 |---|---|---|---|
-| `claudeArchiveCloseTab.enabled` | boolean | `true` | Automatically close the editor tab for a Claude Code session when it is archived. |
-| `claudeArchiveCloseTab.safetyNetSeconds` | number | `60` | Interval, in seconds, for a safety-net poll of the archived session list (in case `fs.watch` drops an event). Set to `0` to disable the timer. |
+| `claudeArchiveCloseTab.enabled` | boolean | `true` | Close the editor tab of a Claude Code session when it is archived. |
+| `claudeArchiveCloseTab.notifications` | `off` \| `statusBar` \| `notification` | `off` | Tell you when a tab is closed. With anything but `off`, an ambiguous archive (several tabs match, none closed) shows a warning with a **Show Log** button. |
+| `claudeArchiveCloseTab.skipPinnedTabs` | boolean | `false` | Keep pinned tabs open even when their session is archived. |
+| `claudeArchiveCloseTab.recentLabelSeconds` | number | `90` | How long a tab that swapped away from the archived session still counts as its tab. Never shorter than `safetyNetSeconds + 30`; `0` turns the fallback off. |
+| `claudeArchiveCloseTab.safetyNetSeconds` | number | `60` | Interval, in seconds, for a safety-net poll of the archived session list (in case `fs.watch` drops an event). `0` disables the timer. |
+| `claudeArchiveCloseTab.sqlitePath` | string | `/usr/bin/sqlite3` | Absolute path of the `sqlite3` binary (machine setting). Reload the window after changing it. |
+
+## Commands
+
+- **Claude Archive Close Tab: Open Settings** — the settings above.
+- **Claude Archive Close Tab: Show Log** — the Output channel with every decision.
 
 ## Confirming it's active
 
@@ -124,11 +137,10 @@ nothing.
 
 ## Platform support
 
-**macOS only, currently.** The state file paths themselves
-(`context.globalStorageUri` / `context.storageUri`) are portable, but the
-extension shells out to the fixed path `/usr/bin/sqlite3`, which only exists
-on macOS. Supporting other platforms would need a configurable or
-auto-detected `sqlite3` binary path.
+Built and used on macOS. The state file paths themselves
+(`context.globalStorageUri` / `context.storageUri`) are portable; on Linux or
+Windows point `claudeArchiveCloseTab.sqlitePath` at a `sqlite3` binary
+(untested there).
 
 ## Status
 

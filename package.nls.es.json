@@ -1,0 +1,15 @@
+{
+  "displayName": "Claude Archive Close Tab",
+  "description": "Cierra la pestaña de una sesión de Claude Code cuando la archivas en la extensión oficial de Anthropic.",
+  "command.openSettings": "Abrir ajustes",
+  "command.showLog": "Mostrar registro",
+  "config.enabled": "Cerrar la pestaña de una sesión de Claude Code cuando se archiva.",
+  "config.notifications": "Avisarte cuando se cierra una pestaña. Si un archivado es ambiguo (varias pestañas encajan y no se cierra ninguna), cualquier valor distinto de `off` muestra un aviso.",
+  "config.notifications.off": "Solo el registro (Salida → Claude Archive Close Tab).",
+  "config.notifications.statusBar": "Un mensaje breve en la barra de estado.",
+  "config.notifications.notification": "Una notificación en la esquina.",
+  "config.skipPinnedTabs": "Dejar abiertas las pestañas fijadas aunque se archive su sesión.",
+  "config.recentLabelSeconds": "Al archivar la sesión que muestra una pestaña, Claude Code cambia esa pestaña a otra sesión en el acto. Durante estos segundos la pestaña sigue contando como la de la sesión archivada y se cierra igual. Nunca menos que `#claudeArchiveCloseTab.safetyNetSeconds#` + 30. Con `0` se desactiva y solo se cierran pestañas que aún muestran el título archivado.",
+  "config.safetyNetSeconds": "Segundos entre comprobaciones de seguridad de la lista de archivadas, por si se pierde un aviso de cambio de fichero. `0` apaga el temporizador.",
+  "config.sqlitePath": "Ruta absoluta del binario `sqlite3` con el que se leen (solo lectura) las bases de estado de VS Code. Recarga la ventana después de cambiarla."
+}
