@@ -1,0 +1,7 @@
+.git/**
+.github/**
+test/**
+ARCHITECTURE.md
+*.vsix
+.gitignore
+scripts/**

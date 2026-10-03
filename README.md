@@ -37,6 +37,14 @@ the private, **undocumented** state that VS Code itself persists:
 - On activation, it seeds the set of already-archived session ids, so it
   never mass-closes tabs for sessions that were archived before the
   extension started.
+- Archiving the session a tab is showing makes the official extension swap
+  that same tab to another session (or a fresh one labelled "Claude Code")
+  immediately — usually before the archive reaches `state.vscdb`. So the
+  extension remembers, for each Claude tab, the label it had until a moment
+  ago (`max(90, safetyNetSeconds + 30)` seconds) and the `panelTabSessions`
+  titles it has seen, since the swapped session also drops out of that list.
+  A tab still showing the archived title wins; otherwise the tab that showed
+  it until a moment ago is closed.
 - If an archived session's title matches more than one currently open tab,
   the extension closes **nothing** for that event and logs a warning instead
   of guessing and possibly closing the wrong tab.
@@ -44,18 +52,20 @@ the private, **undocumented** state that VS Code itself persists:
 ### Breakage risk
 
 This extension was verified against official `claude-code` extension version
-**2.1.274**. It depends entirely on private VS Code state (database paths,
+**2.1.286**. It depends entirely on private VS Code state (database paths,
 table/key names, and JSON field names) that Anthropic does not document or
 guarantee. **Any update to the official extension can silently break this
 one** — there is no compatibility contract to rely on.
 
 ## Install
 
-Clone this repository directly into your VS Code extensions folder:
+Every new version is published as a GitHub release with its `.vsix`. Install
+it on the machine whose VS Code window you use (for Remote SSH, the client
+Mac — see below):
 
 ```bash
-git clone https://github.com/pocharlies/claude-archive-close-tab.git \
-  ~/.vscode/extensions/claude-archive-close-tab
+gh release download --repo pocharlies/claude-archive-close-tab --pattern '*.vsix'
+code --install-extension claude-archive-close-tab-*.vsix --force
 ```
 
 Then reload VS Code:
@@ -64,7 +74,17 @@ Then reload VS Code:
 Cmd+Shift+P -> Developer: Reload Window
 ```
 
-No build step and no dependencies to install — it's plain CommonJS.
+No build step and no runtime dependencies — it's plain CommonJS.
+
+## Development
+
+`npm test` runs the tab-matching tests (`node:test`, no dependencies);
+`npm run package` builds the `.vsix`. CI runs both on every pull request. A
+merge to `main` that bumps `version` in `package.json` releases it: the VSIX
+build and the changelog run in parallel, and the changelog is written from
+each merged pull request's title and description plus the commits since the
+previous tag (`scripts/changelog.sh`), so **the pull request description is
+the changelog** — write it for the reader of the release notes.
 
 ## Settings
 

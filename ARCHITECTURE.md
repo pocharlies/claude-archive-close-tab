@@ -1,11 +1,11 @@
 # ARCHITECTURE — claude-archive-close-tab
 
-Extensión de VS Code que cierra la pestaña de editor de una sesión de Claude Code cuando se archiva en la extensión oficial de Anthropic. **Desactivada en el host desde el 01-10-2026** (carpeta `claude-archive-close-tab.disabled-20261001T1420` en `~/.vscode-server/extensions`).
+Extensión de VS Code que cierra la pestaña de editor de una sesión de Claude Code cuando se archiva en la extensión oficial de Anthropic. Corre en el **cliente** (`extensionKind: ui`): instalada en los dos Macs (casa y CloudBlue). La copia del servidor x86 está desactivada desde el 01-10-2026 (`claude-archive-close-tab.disabled-20261001T1420` en `~/.vscode-server/extensions`): allí el estado que lee está vacío.
 
 ## Clientes y versiones
 
-- Un cliente: VS Code (`engines.vscode ^1.94.0`) con la extensión oficial `claude-code`. Versión 0.1.0, publisher `local`, licencia MIT.
-- Un único fichero, `extension.js` (333 líneas). Sin API ni otros clientes.
+- Un cliente: VS Code (`engines.vscode ^1.94.0`) con la extensión oficial `claude-code` (verificada con 2.1.286). Publisher `local`, licencia MIT; la versión manda en `package.json`.
+- `extension.js` (enganche con VS Code) y `lib/matching.js` (lógica pura de qué pestaña cerrar). Sin API ni otros clientes.
 
 ## Dependencias (en ambos sentidos)
 
@@ -21,19 +21,23 @@ JavaScript sin build ni dependencias de npm. `sqlite3` del sistema por línea de
 
 Ninguno: no reutiliza ni exporta nada. El título de la pestaña se compara con el título truncado con `…` de `panelTabSessions`; si coincide más de una pestaña, no cierra ninguna.
 
+Al archivar la sesión que una pestaña está mostrando, la extensión oficial cambia esa misma pestaña a otra sesión (o a una nueva, «Claude Code») en el acto, antes de que el archivado llegue a `state.vscdb`. Por eso la extensión recuerda la etiqueta que cada pestaña tuvo hasta hace `max(90, safetyNetSeconds + 30)` s y los títulos de `panelTabSessions` ya vistos: gana la pestaña que aún muestra el título y, si no hay, la que lo mostraba hace un momento.
+
 ## Cómo se construye
 
 Un fichero de JavaScript plano. Nunca escribe en las bases de VS Code (solo lectura). Al activarse siembra el conjunto de sesiones ya archivadas para no cerrar pestañas antiguas en masa.
 
 ## Tests
 
-Ninguno. Sin CI.
+`npm test`: `node:test` sobre `lib/matching.js` (coincidencia de títulos, pestaña que cambió de sesión, ambigüedad).
 
 ## CI/CD y despliegue
 
-Sin CI. Se instala empaquetada o desde la carpeta de extensiones (hoy, deshabilitada).
+- `ci.yml`: en cada PR, tests y empaquetado del `.vsix`.
+- `release.yml`: un merge a `main` con una `version` sin tag es una versión nueva. El build del `.vsix` y el **changelog** van en paralelo; el changelog sale del título y la descripción de cada PR mergeada y de los commits desde el tag anterior (`scripts/changelog.sh`). Los dos acaban en una GitHub release `vX.Y.Z`.
+- Runners de GitHub (repo personal y público): `arc-k8s` es solo de `pocharlies-org`.
+- Despliegue: `code --install-extension` del `.vsix` de la release en cada Mac y recargar la ventana.
 
 ## Decisiones y trampas
 
-- Lee un formato interno de otra extensión: se rompe con cualquier actualización de `claude-code`. Por eso está desactivada.
-- Propuesta (no se ejecuta aquí): archivar el repo (ver C5 de SC-1425).
+- Lee un formato interno de otra extensión: se puede romper con cualquier actualización de `claude-code`. El log del canal «Claude Archive Close Tab» dice qué decidió en cada archivado.

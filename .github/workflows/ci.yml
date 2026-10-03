@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # 2026-10-03 dani · repo personal (pocharlies/): arc-k8s solo existe para pocharlies-org.
+    # Público, así que no gasta minutos. Vuelve a arc-k8s si el repo pasa a pocharlies-org.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --check extension.js && node --check lib/matching.js
+      - run: npm test
+      - name: Package VSIX
+        run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: '*.vsix'
+          retention-days: 7
