@@ -1,8 +1,9 @@
 {
   "name": "claude-archive-close-tab",
-  "displayName": "Claude Archive Close Tab",
-  "description": "Closes the editor tab for a Claude Code session when it is archived in the official Anthropic extension.",
-  "version": "0.3.0",
+  "displayName": "%displayName%",
+  "description": "%description%",
+  "version": "0.4.0",
+  "icon": "images/icon.png",
   "extensionKind": [
     "ui"
   ],
@@ -38,18 +39,71 @@
     "onStartupFinished"
   ],
   "contributes": {
+    "commands": [
+      {
+        "command": "claudeArchiveCloseTab.openSettings",
+        "title": "%command.openSettings%",
+        "category": "Claude Archive Close Tab",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "claudeArchiveCloseTab.showLog",
+        "title": "%command.showLog%",
+        "category": "Claude Archive Close Tab",
+        "icon": "$(output)"
+      }
+    ],
     "configuration": {
       "title": "Claude Archive Close Tab",
       "properties": {
         "claudeArchiveCloseTab.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically close the editor tab for a Claude Code session when it is archived."
+          "order": 0,
+          "markdownDescription": "%config.enabled%"
+        },
+        "claudeArchiveCloseTab.notifications": {
+          "type": "string",
+          "enum": [
+            "off",
+            "statusBar",
+            "notification"
+          ],
+          "enumDescriptions": [
+            "%config.notifications.off%",
+            "%config.notifications.statusBar%",
+            "%config.notifications.notification%"
+          ],
+          "default": "off",
+          "order": 1,
+          "markdownDescription": "%config.notifications%"
+        },
+        "claudeArchiveCloseTab.skipPinnedTabs": {
+          "type": "boolean",
+          "default": false,
+          "order": 2,
+          "markdownDescription": "%config.skipPinnedTabs%"
+        },
+        "claudeArchiveCloseTab.recentLabelSeconds": {
+          "type": "number",
+          "default": 90,
+          "minimum": 0,
+          "order": 3,
+          "markdownDescription": "%config.recentLabelSeconds%"
         },
         "claudeArchiveCloseTab.safetyNetSeconds": {
           "type": "number",
           "default": 60,
-          "description": "Interval (in seconds) for a safety-net poll of the archived session list, in case fs.watch drops an event. Set to 0 to disable the timer."
+          "minimum": 0,
+          "order": 4,
+          "markdownDescription": "%config.safetyNetSeconds%"
+        },
+        "claudeArchiveCloseTab.sqlitePath": {
+          "type": "string",
+          "default": "/usr/bin/sqlite3",
+          "scope": "machine",
+          "order": 5,
+          "markdownDescription": "%config.sqlitePath%"
         }
       }
     }

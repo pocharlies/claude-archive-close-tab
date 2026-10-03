@@ -77,3 +77,13 @@ test('LabelHistory: a tab never seen before has no history', () => {
   const history = new LabelHistory(90_000);
   assert.equal(history.recentlyHad(tab('x'), 'x', 0), false);
 });
+
+test('LabelHistory: a window of 0 turns the recent-label fallback off', () => {
+  const history = new LabelHistory(0);
+  const t = tab('Selector del despacho');
+  history.observe([t], 0);
+  t.label = 'Claude Code';
+  history.observe([t], 0);
+  assert.equal(history.recentlyHad(t, 'Selector del despacho', 0), false);
+  assert.equal(pickTab('Selector del despacho', [t], history, 0).reason, 'no match');
+});

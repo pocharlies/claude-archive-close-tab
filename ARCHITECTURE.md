@@ -7,6 +7,10 @@ Extensión de VS Code que cierra la pestaña de editor de una sesión de Claude 
 - Un cliente: VS Code (`engines.vscode ^1.94.0`) con la extensión oficial `claude-code` (verificada con 2.1.286). Publisher `local`, licencia MIT; la versión manda en `package.json`.
 - `extension.js` (enganche con VS Code) y `lib/matching.js` (lógica pura de qué pestaña cerrar). Sin API ni otros clientes.
 
+## Ajustes y comandos
+
+`enabled`, `notifications` (`off`/`statusBar`/`notification`), `skipPinnedTabs`, `recentLabelSeconds`, `safetyNetSeconds` y `sqlitePath` (sección `claudeArchiveCloseTab`), más los comandos «Open Settings» y «Show Log». Textos en `package.nls.json` y `package.nls.es.json`. Logo: `images/icon.svg` → `images/icon.png` (el PNG es el que empaqueta el VSIX).
+
 ## Dependencias (en ambos sentidos)
 
 - Depende de: el estado **privado y no documentado** que VS Code persiste: `state.vscdb` de `globalStorage` (clave `Anthropic.claude-code`, campo `hiddenSessionIds`) y de `workspaceStorage` (`panelTabSessions`), leídos con `/usr/bin/sqlite3` en solo lectura; y de los webviews cuyo tipo contiene `claudeVSCodePanel`.
@@ -42,3 +46,5 @@ Un fichero de JavaScript plano. Nunca escribe en las bases de VS Code (solo lect
 ## Decisiones y trampas
 
 - Lee un formato interno de otra extensión: se puede romper con cualquier actualización de `claude-code`. El log del canal «Claude Archive Close Tab» dice qué decidió en cada archivado.
+- `LabelHistory` supone que VS Code conserva el mismo objeto `Tab` mientras la pestaña está abierta y solo le cambia los campos. No está documentado; si VS Code recreara los objetos, el plugin vuelve al comportamiento anterior (cerrar solo si la etiqueta actual coincide), nunca cierra una equivocada. Un «matched by recent label» en el log confirma la suposición.
+- Falso positivo acotado: si una pestaña pasa de la sesión X a otra por otra vía y X se archiva desde la lista dentro de la ventana (`recentLabelSeconds`), se cierra esa pestaña. No se pierde ninguna sesión: cerrar una pestaña no archiva ni borra nada.

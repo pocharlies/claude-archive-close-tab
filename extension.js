@@ -11,9 +11,11 @@ const CLAUDE_KEY = 'Anthropic.claude-code';
 const WATCH_DEBOUNCE_MS = 200;
 const SQLITE_BUSY_RETRIES = 3;
 const SQLITE_BUSY_BACKOFF_MS = 50;
-// Verified on this machine: /usr/bin/sqlite3 3.51. Hardcoded so a
-// Homebrew/pyenv-shimmed `sqlite3` earlier in PATH is never picked up instead.
-const SQLITE_BIN = '/usr/bin/sqlite3';
+// An absolute path, not a PATH lookup, so a Homebrew/pyenv-shimmed `sqlite3`
+// is never picked up by accident. Read once on activation (setting
+// claudeArchiveCloseTab.sqlitePath); changing it needs a window reload.
+const DEFAULT_SQLITE_BIN = '/usr/bin/sqlite3';
+let sqliteBin = DEFAULT_SQLITE_BIN;
 
 let output;
 
@@ -32,18 +34,52 @@ function warn(msg) {
 }
 
 function isEnabled() {
-  return vscode.workspace.getConfiguration(CONFIG_SECTION).get('enabled', true);
+  return config().get('enabled', true);
 }
 
 function safetyNetSeconds() {
-  return vscode.workspace.getConfiguration(CONFIG_SECTION).get('safetyNetSeconds', 60);
+  return config().get('safetyNetSeconds', 60);
+}
+
+function config() {
+  return vscode.workspace.getConfiguration(CONFIG_SECTION);
 }
 
 // How long a tab's previous label still counts as "this tab showed that
 // session": the archive can reach state.vscdb up to one safety-net interval
-// after the tab already swapped to another session.
+// after the tab already swapped to another session, so the window is never
+// shorter than safetyNetSeconds + 30. 0 turns the fallback off.
 function labelMemoryMs() {
-  return Math.max(90, safetyNetSeconds() + 30) * 1000;
+  const seconds = config().get('recentLabelSeconds', 90);
+  if (!(seconds > 0)) {
+    return 0;
+  }
+  return Math.max(seconds, safetyNetSeconds() + 30) * 1000;
+}
+
+function skipPinnedTabs() {
+  return config().get('skipPinnedTabs', false);
+}
+
+/** Tell the user, per claudeArchiveCloseTab.notifications ("off" | "statusBar" | "notification"). */
+function notify(kind, message) {
+  const mode = config().get('notifications', 'off');
+  if (mode === 'off') {
+    return;
+  }
+  if (kind === 'warning') {
+    vscode.window.showWarningMessage(message, 'Show Log').then((choice) => {
+      if (choice) {
+        output.show(true);
+      }
+    });
+    return;
+  }
+  if (mode === 'statusBar') {
+    vscode.window.setStatusBarMessage(`$(archive) ${message}`, 5000);
+  } else {
+    vscode.window.showInformationMessage(message);
+  }
 }
 
 function sleep(ms) {
@@ -61,7 +97,7 @@ async function readStateKey(dbPath, key) {
   for (let attempt = 1; attempt <= SQLITE_BUSY_RETRIES; attempt++) {
     try {
       const raw = await new Promise((resolve, reject) => {
-        execFile(SQLITE_BIN, ['-readonly', dbPath, sql], { encoding: 'utf8' }, (err, stdout, stderr) => {
+        execFile(sqliteBin, ['-readonly', dbPath, sql], { encoding: 'utf8' }, (err, stdout, stderr) => {
           if (err) {
             reject(new Error(stderr || err.message));
             return;
@@ -110,8 +146,19 @@ function activate(context) {
   context.subscriptions.push(output);
   log('activating');
 
-  if (!fs.existsSync(SQLITE_BIN)) {
-    warn(`sqlite3 binary not found at ${SQLITE_BIN} — Claude Archive Close Tab is disabled (no watchers/timers set up).`);
+  context.subscriptions.push(
+    vscode.commands.registerCommand('claudeArchiveCloseTab.openSettings', () =>
+      vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${context.extension.id}`)
+    ),
+    vscode.commands.registerCommand('claudeArchiveCloseTab.showLog', () => output.show(true))
+  );
+
+  sqliteBin = config().get('sqlitePath', DEFAULT_SQLITE_BIN) || DEFAULT_SQLITE_BIN;
+  if (!fs.existsSync(sqliteBin)) {
+    warn(
+      `sqlite3 binary not found at ${sqliteBin} — Claude Archive Close Tab is disabled (no watchers/timers set up). ` +
+        `Set claudeArchiveCloseTab.sqlitePath and reload the window.`
+    );
     return;
   }
 
@@ -241,11 +288,17 @@ function activate(context) {
               `${candidates.length} candidate tabs: ${candidates.map((t) => `"${t.label}"`).join(', ')}. ` +
               `Not closing any tab to avoid closing the wrong one.`
           );
+          notify('warning', `Archived "${title}" but ${candidates.length} tabs match it, so none was closed.`);
+          continue;
+        }
+        if (tab.isPinned && skipPinnedTabs()) {
+          log(`kept pinned tab "${tab.label}" for archived session ${sessionId} (skipPinnedTabs is on)`);
           continue;
         }
         try {
           await vscode.window.tabGroups.close(tab);
           log(`closed tab for archived session ${sessionId} (title="${title}", matched by ${reason}, tab now "${tab.label}")`);
+          notify('info', `Closed the tab of archived session "${title}"`);
         } catch (err) {
           log(`failed to close tab for session ${sessionId}: ${err.message}`);
         }
@@ -334,7 +387,13 @@ function activate(context) {
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration(`${CONFIG_SECTION}.safetyNetSeconds`)) {
         configureSafetyNet();
+      }
+      if (
+        e.affectsConfiguration(`${CONFIG_SECTION}.safetyNetSeconds`) ||
+        e.affectsConfiguration(`${CONFIG_SECTION}.recentLabelSeconds`)
+      ) {
         history.memoryMs = labelMemoryMs();
+        log(`recent-label window set to ${history.memoryMs / 1000}s`);
       }
     })
   );
