@@ -1,0 +1,23 @@
+# Review automatica de pull requests (plantilla templates/ci/pr-review.yml de
+# pocharlies-org/k8s-gitops-pocharlies). La implementacion vive alli.
+#
+# `pull_request` a proposito, NUNCA `pull_request_target`: el segundo ejecuta
+# con los secretos del repo base sobre codigo de un fork.
+name: PR review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  review:
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      # 2026-10-03 dani · repo personal (pocharlies/): arc-k8s solo existe para pocharlies-org,
+      # como en skirmshop-picqer. Vuelve a arc-k8s si el repo pasa a pocharlies-org.
+      runner: ubuntu-latest
+    uses: pocharlies-org/k8s-gitops-pocharlies/.github/workflows/reusable-pr-review.yml@main
+    secrets: inherit

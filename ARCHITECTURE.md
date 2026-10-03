@@ -35,6 +35,7 @@ Un fichero de JavaScript plano. Nunca escribe en las bases de VS Code (solo lect
 
 - `ci.yml`: en cada PR, tests y empaquetado del `.vsix`.
 - `release.yml`: un merge a `main` con una `version` sin tag es una versión nueva. El build del `.vsix` y el **changelog** van en paralelo; el changelog sale del título y la descripción de cada PR mergeada y de los commits desde el tag anterior (`scripts/changelog.sh`). Los dos acaban en una GitHub release `vX.Y.Z`.
+- `pr-review.yml`: la review automática de la casa (reusable de `k8s-gitops-pocharlies`).
 - Runners de GitHub (repo personal y público): `arc-k8s` es solo de `pocharlies-org`.
 - Despliegue: `code --install-extension` del `.vsix` de la release en cada Mac y recargar la ventana.
 
