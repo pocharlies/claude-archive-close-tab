@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --check extension.js && node --check lib/matching.js
+      - run: node --check extension.js && node --check lib/*.js
       - run: npm test
       - name: Package VSIX
         run: npm run package

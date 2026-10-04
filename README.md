@@ -49,6 +49,21 @@ the private, **undocumented** state that VS Code itself persists:
   the extension closes **nothing** for that event and logs a warning instead
   of guessing and possibly closing the wrong tab.
 
+### Even column widths
+
+Closing a session's tab can empty a column; VS Code then closes that editor
+group and the neighbour takes all its space. With
+`claudeArchiveCloseTab.evenEditorWidths` on (the default), whenever a group
+opens or closes (`tabGroups.onDidChangeTabGroups`, ignoring changes that
+only move focus) and at least two remain, the extension runs
+*View: Reset Editor Group Sizes* (`workbench.action.evenEditorWidths`),
+debounced 100 ms so a burst of changes makes one call. It also runs once on
+activation and when you turn the setting on. It does not depend on `enabled`
+or on `sqlite3`.
+
+Limitation: VS Code has no event for a manual drag-resize, so columns you
+resize by hand stay as they are until the next column opens or closes.
+
 ### Breakage risk
 
 This extension was verified against official `claude-code` extension version
@@ -78,7 +93,7 @@ No build step and no runtime dependencies — it's plain CommonJS.
 
 ## Development
 
-`npm test` runs the tab-matching tests (`node:test`, no dependencies);
+`npm test` runs the tab-matching, even-widths and activation tests (`node:test`, no dependencies);
 `npm run package` builds the `.vsix`. CI runs both on every pull request. A
 merge to `main` that bumps `version` in `package.json` releases it: the VSIX
 build and the changelog run in parallel, and the changelog is written from
@@ -95,6 +110,7 @@ descriptions are translated to Spanish when VS Code runs in Spanish.
 | Setting | Type | Default | Description |
 |---|---|---|---|
 | `claudeArchiveCloseTab.enabled` | boolean | `true` | Close the editor tab of a Claude Code session when it is archived. |
+| `claudeArchiveCloseTab.evenEditorWidths` | boolean | `true` | Keep all editor columns the same width: when a column opens or closes, the remaining ones are resized evenly. Independent of `enabled`. |
 | `claudeArchiveCloseTab.notifications` | `off` \| `statusBar` \| `notification` | `off` | Tell you when a tab is closed. With anything but `off`, an ambiguous archive (several tabs match, none closed) shows a warning with a **Show Log** button. |
 | `claudeArchiveCloseTab.skipPinnedTabs` | boolean | `false` | Keep pinned tabs open even when their session is archived. |
 | `claudeArchiveCloseTab.recentLabelSeconds` | number | `90` | How long a tab that swapped away from the archived session still counts as its tab. Never shorter than `safetyNetSeconds + 30`; `0` turns the fallback off. |

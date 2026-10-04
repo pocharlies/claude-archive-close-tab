@@ -4,6 +4,7 @@
   "command.openSettings": "Abrir ajustes",
   "command.showLog": "Mostrar registro",
   "config.enabled": "Cerrar la pestaña de una sesión de Claude Code cuando se archiva.",
+  "config.evenEditorWidths": "Mantener todas las columnas del editor con el mismo ancho. Cada vez que se abre o se cierra una columna (grupo de editores), por ejemplo cuando al archivar una sesión se cierra la última pestaña de una columna, las columnas restantes se redimensionan por igual (*Ver: Restablecer tamaños de grupos de editores*). Las columnas que cambies de tamaño a mano se quedan como están hasta que se abra o se cierre otra columna.",
   "config.notifications": "Avisarte cuando se cierra una pestaña. Si un archivado es ambiguo (varias pestañas encajan y no se cierra ninguna), cualquier valor distinto de `off` muestra un aviso.",
   "config.notifications.off": "Solo el registro (Salida → Claude Archive Close Tab).",
   "config.notifications.statusBar": "Un mensaje breve en la barra de estado.",

@@ -5,11 +5,11 @@ Extensión de VS Code que cierra la pestaña de editor de una sesión de Claude 
 ## Clientes y versiones
 
 - Un cliente: VS Code (`engines.vscode ^1.94.0`) con la extensión oficial `claude-code` (verificada con 2.1.286). Publisher `local`, licencia MIT; la versión manda en `package.json`.
-- `extension.js` (enganche con VS Code) y `lib/matching.js` (lógica pura de qué pestaña cerrar). Sin API ni otros clientes.
+- `extension.js` (enganche con VS Code) y `lib/matching.js` (lógica pura de qué pestaña cerrar) y `lib/evenWidths.js` (lógica pura de cuándo igualar el ancho de las columnas). Sin API ni otros clientes.
 
 ## Ajustes y comandos
 
-`enabled`, `notifications` (`off`/`statusBar`/`notification`), `skipPinnedTabs`, `recentLabelSeconds`, `safetyNetSeconds` y `sqlitePath` (sección `claudeArchiveCloseTab`), más los comandos «Open Settings» y «Show Log». Textos en `package.nls.json` y `package.nls.es.json`. Logo: `images/icon.svg` → `images/icon.png` (el PNG es el que empaqueta el VSIX).
+`enabled`, `evenEditorWidths`, `notifications` (`off`/`statusBar`/`notification`), `skipPinnedTabs`, `recentLabelSeconds`, `safetyNetSeconds` y `sqlitePath` (sección `claudeArchiveCloseTab`), más los comandos «Open Settings» y «Show Log». Textos en `package.nls.json` y `package.nls.es.json`. Logo: `images/icon.svg` → `images/icon.png` (el PNG es el que empaqueta el VSIX).
 
 ## Dependencias (en ambos sentidos)
 
@@ -19,7 +19,7 @@ Extensión de VS Code que cierra la pestaña de editor de una sesión de Claude 
 
 ## Stack
 
-JavaScript sin build ni dependencias de npm. `sqlite3` del sistema por línea de comandos. API de VS Code: `fs.watch` sobre el directorio, `onDidChangeTabs` y un sondeo de seguridad cada 60 s.
+JavaScript sin build ni dependencias de npm. `sqlite3` del sistema por línea de comandos. API de VS Code: `fs.watch` sobre el directorio, `onDidChangeTabs`, `onDidChangeTabGroups` (igualar columnas con `workbench.action.evenEditorWidths`, con debounce de 100 ms; se registra antes de comprobar `sqlite3`, así que funciona sin él) y un sondeo de seguridad cada 60 s.
 
 ## Componentes compartidos
 
@@ -33,7 +33,7 @@ Un fichero de JavaScript plano. Nunca escribe en las bases de VS Code (solo lect
 
 ## Tests
 
-`npm test`: `node:test` sobre `lib/matching.js` (coincidencia de títulos, pestaña que cambió de sesión, ambigüedad).
+`npm test`: `node:test` sobre `lib/matching.js` (coincidencia de títulos, pestaña que cambió de sesión, ambigüedad), `lib/evenWidths.js` y una activación con un `vscode` simulado (`test/activation.test.js`).
 
 ## CI/CD y despliegue
 
@@ -45,6 +45,7 @@ Un fichero de JavaScript plano. Nunca escribe en las bases de VS Code (solo lect
 
 ## Decisiones y trampas
 
+- Igualar columnas solo reacciona a que un grupo se abra o se cierre: VS Code no emite evento al arrastrar el borde a mano, así que ese ajuste manual dura hasta el siguiente cambio de grupos.
 - Lee un formato interno de otra extensión: se puede romper con cualquier actualización de `claude-code`. El log del canal «Claude Archive Close Tab» dice qué decidió en cada archivado.
 - `LabelHistory` supone que VS Code conserva el mismo objeto `Tab` mientras la pestaña está abierta y solo le cambia los campos. No está documentado; si VS Code recreara los objetos, el plugin vuelve al comportamiento anterior (cerrar solo si la etiqueta actual coincide), nunca cierra una equivocada. Un «matched by recent label» en el log confirma la suposición.
 - Falso positivo acotado: si una pestaña pasa de la sesión X a otra por otra vía y X se archiva desde la lista dentro de la ventana (`recentLabelSeconds`), se cierra esa pestaña. No se pierde ninguna sesión: cerrar una pestaña no archiva ni borra nada.
