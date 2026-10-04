@@ -5,10 +5,12 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { LabelHistory, pickTab } = require('./lib/matching');
+const { evenWidthsReason } = require('./lib/evenWidths');
 
 const CONFIG_SECTION = 'claudeArchiveCloseTab';
 const CLAUDE_KEY = 'Anthropic.claude-code';
 const WATCH_DEBOUNCE_MS = 200;
+const EVEN_WIDTHS_DEBOUNCE_MS = 100;
 const SQLITE_BUSY_RETRIES = 3;
 const SQLITE_BUSY_BACKOFF_MS = 50;
 // An absolute path, not a PATH lookup, so a Homebrew/pyenv-shimmed `sqlite3`
@@ -35,6 +37,10 @@ function warn(msg) {
 
 function isEnabled() {
   return config().get('enabled', true);
+}
+
+function evenEditorWidthsEnabled() {
+  return config().get('evenEditorWidths', true);
 }
 
 function safetyNetSeconds() {
@@ -152,6 +158,58 @@ function activate(context) {
     ),
     vscode.commands.registerCommand('claudeArchiveCloseTab.showLog', () => output.show(true))
   );
+
+  // Independent of `enabled` and of sqlite3: keeps the editor columns the same
+  // width. Archiving a session closes its tab; if that was the last tab of a
+  // column VS Code closes the empty group and the neighbour takes its space.
+  // There is no event for a manual drag-resize, so this only reacts to a
+  // column opening or closing.
+  let evenTimer;
+  context.subscriptions.push({
+    dispose: () => {
+      if (evenTimer) {
+        clearTimeout(evenTimer);
+      }
+    },
+  });
+  // Debounced so several group changes in a row (e.g. Join All Groups) make one call.
+  const scheduleEvenWidths = (reason) => {
+    if (evenTimer) {
+      clearTimeout(evenTimer);
+    }
+    evenTimer = setTimeout(() => {
+      evenTimer = undefined;
+      const count = vscode.window.tabGroups.all.length;
+      Promise.resolve(vscode.commands.executeCommand('workbench.action.evenEditorWidths')).then(
+        () => log(`evened editor widths (${count} groups, reason: ${reason})`),
+        (err) => log(`failed to even editor widths: ${err && err.message}`)
+      );
+    }, EVEN_WIDTHS_DEBOUNCE_MS);
+  };
+  context.subscriptions.push(
+    vscode.window.tabGroups.onDidChangeTabGroups((e) => {
+      const reason = evenWidthsReason({
+        enabled: evenEditorWidthsEnabled(),
+        groupCount: vscode.window.tabGroups.all.length,
+        event: e,
+      });
+      if (reason) {
+        scheduleEvenWidths(reason);
+      }
+    }),
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (
+        e.affectsConfiguration(`${CONFIG_SECTION}.evenEditorWidths`) &&
+        evenEditorWidthsEnabled() &&
+        vscode.window.tabGroups.all.length >= 2
+      ) {
+        scheduleEvenWidths('setting');
+      }
+    })
+  );
+  if (evenEditorWidthsEnabled() && vscode.window.tabGroups.all.length >= 2) {
+    scheduleEvenWidths('startup');
+  }
 
   sqliteBin = config().get('sqlitePath', DEFAULT_SQLITE_BIN) || DEFAULT_SQLITE_BIN;
   if (!fs.existsSync(sqliteBin)) {

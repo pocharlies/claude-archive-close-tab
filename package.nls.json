@@ -4,6 +4,7 @@
   "command.openSettings": "Open Settings",
   "command.showLog": "Show Log",
   "config.enabled": "Close the editor tab of a Claude Code session when it is archived.",
+  "config.evenEditorWidths": "Keep all editor columns the same width. Whenever a column (editor group) opens or closes, for example when archiving a session closes the last tab of a column, the remaining columns are resized evenly (*View: Reset Editor Group Sizes*). Columns you resize by hand stay as they are until the next column opens or closes.",
   "config.notifications": "Tell you when a tab is closed. Ambiguous archives (several tabs match, so none is closed) show a warning with any value other than `off`.",
   "config.notifications.off": "Only the log (Output → Claude Archive Close Tab).",
   "config.notifications.statusBar": "A short message in the status bar.",
