@@ -19,5 +19,8 @@ jobs:
       # 2026-10-03 dani · repo personal (pocharlies/): arc-k8s solo existe para pocharlies-org,
       # como en skirmshop-picqer. Vuelve a arc-k8s si el repo pasa a pocharlies-org.
       runner: ubuntu-latest
+      # SC-2182: el juez (engine por defecto del reusable) necesita el LiteLLM del cluster y desde
+      # ubuntu-latest no se alcanza; `propio` es el motor de hasta ahora, sin cambios para este repo.
+      engine: propio
     uses: pocharlies-org/k8s-gitops-pocharlies/.github/workflows/reusable-pr-review.yml@main
     secrets: inherit
